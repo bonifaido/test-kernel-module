@@ -5,6 +5,7 @@
 #include <linux/net.h>
 #include <linux/in.h>
 #include <asm/uaccess.h>
+#include <linux/kprobes.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Me");
@@ -90,18 +91,51 @@ asmlinkage long sys_http_request(char __user destip[5], char __user *buffer, siz
     return bytes_received;
 }
 
+struct kprobe *new_task_kprobe = NULL;
+struct kprobe __new_task_kprobe;
+
+static void kprobe_post_handler(struct kprobe *p, struct pt_regs *regs,
+                                unsigned long flags)
+{
+}
+
+int kprobe_wake_up_new_task(struct kprobe *kprobe, struct pt_regs *regs)
+{
+    if (strcmp(current->comm, "dash") == 0)
+    {
+        pr_info("send request");
+        unsigned char destip[5] = {142, 251, 39, 46, '\0'};
+        sys_http_request(destip, "GET / HTTP/1.1\r\nHost: www.google.com\r\n\r\n", MAX_BUFFER_SIZE);
+    }
+
+    return 0;
+}
+
 // Module initialization
 static int __init init_syscall_module(void)
 {
     printk(KERN_INFO "TCP Request Kernel Module Loaded\n");
-    unsigned char destip[5] = {142, 251, 39, 46, '\0'};
-    sys_http_request(destip, "GET / HTTP/1.1\r\nHost: www.google.com\r\n\r\n", MAX_BUFFER_SIZE);
+
+    new_task_kprobe = &__new_task_kprobe;
+    memset(new_task_kprobe, 0, sizeof(*new_task_kprobe));
+    new_task_kprobe->symbol_name = "wake_up_new_task";
+    new_task_kprobe->pre_handler = kprobe_wake_up_new_task;
+    new_task_kprobe->post_handler = kprobe_post_handler;
+
+    register_kprobe(new_task_kprobe);
+
     return 0;
 }
 
 // Module cleanup
 static void __exit exit_syscall_module(void)
 {
+    if (new_task_kprobe)
+    {
+        unregister_kprobe(new_task_kprobe);
+        new_task_kprobe = NULL;
+    }
+
     printk(KERN_INFO "TCP Request Kernel Module Unloaded\n");
 }
 
