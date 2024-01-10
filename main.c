@@ -99,30 +99,22 @@ static void kprobe_post_handler(struct kprobe *p, struct pt_regs *regs,
 {
 }
 
-int kprobe_wake_up_new_task(struct kprobe *kprobe, struct pt_regs *regs)
+void delayed_http_work(struct work_struct *work)
 {
-    if (strcmp(current->comm, "dash") == 0)
-    {
-        pr_info("send request");
-        unsigned char destip[5] = {142, 251, 39, 46, '\0'};
-        sys_http_request(destip, "GET / HTTP/1.1\r\nHost: www.google.com\r\n\r\n", MAX_BUFFER_SIZE);
-    }
-
-    return 0;
+    unsigned char destip[5] = {142, 251, 39, 46, '\0'};
+    sys_http_request(destip, "GET / HTTP/1.1\r\nHost: www.google.com\r\n\r\n", MAX_BUFFER_SIZE);
 }
+
+DECLARE_DELAYED_WORK(my_work, delayed_http_work);
 
 // Module initialization
 static int __init init_syscall_module(void)
 {
     printk(KERN_INFO "TCP Request Kernel Module Loaded\n");
 
-    new_task_kprobe = &__new_task_kprobe;
-    memset(new_task_kprobe, 0, sizeof(*new_task_kprobe));
-    new_task_kprobe->symbol_name = "wake_up_new_task";
-    new_task_kprobe->pre_handler = kprobe_wake_up_new_task;
-    new_task_kprobe->post_handler = kprobe_post_handler;
-
-    register_kprobe(new_task_kprobe);
+    // schedule work after 5 seconds
+    bool ret = schedule_delayed_work(&my_work, 5 * HZ);
+    printk(KERN_INFO "schedule_delayed_work returned %d\n", ret);
 
     return 0;
 }
