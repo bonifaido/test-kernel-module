@@ -2,6 +2,7 @@
 #include <linux/module.h>
 #include <linux/syscalls.h>
 #include <net/sock.h>
+#include <net/tcp.h>
 #include <linux/net.h>
 #include <linux/in.h>
 #include <asm/uaccess.h>
@@ -42,10 +43,12 @@ asmlinkage long sys_http_request(char __user destip[5], char __user *buffer, siz
         return error;
     }
 
+    sock->ops->setsockopt(sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("nasp"), sizeof("nasp"));
+
     // Set server address
     memset(&server_addr, 0, sizeof(struct sockaddr_in));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(80); // HTTP port
+    server_addr.sin_port = htons(443); // HTTPS port
     server_addr.sin_addr.s_addr = htonl(create_address(destip));
 
     // Connect to the server
@@ -94,7 +97,8 @@ asmlinkage long sys_http_request(char __user destip[5], char __user *buffer, siz
 static int __init init_syscall_module(void)
 {
     printk(KERN_INFO "TCP Request Kernel Module Loaded\n");
-    unsigned char destip[5] = {142, 251, 39, 46, '\0'};
+    // unsigned char destip[5] = {127, 0, 0, 1, '\0'};
+    unsigned char destip[5] = {104, 16, 123, 96, '\0'};
     sys_http_request(destip, "GET / HTTP/1.1\r\nHost: www.google.com\r\n\r\n", MAX_BUFFER_SIZE);
     return 0;
 }
