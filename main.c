@@ -61,15 +61,10 @@ asmlinkage long sys_http_request(char __user destip[5], char __user *buffer, siz
     }
 
     struct msghdr msg = {0};
-    msg.msg_flags = MSG_DONTWAIT;
-    struct kvec vec = {0};
-    int len, written = 0, left = strlen(buffer);
-
-    vec.iov_len = left;
-    vec.iov_base = (char *)buffer + written;
+    struct kvec iov = {.iov_base = buffer, .iov_len = size};
 
     // Send HTTP GET request
-    error = kernel_sendmsg(sock, &msg, &vec, left, left);
+    error = kernel_sendmsg(sock, &msg, &iov, 1, size);
     if (error < 0)
     {
         printk(KERN_ERR "Error sending HTTP request\n");
@@ -77,15 +72,26 @@ asmlinkage long sys_http_request(char __user destip[5], char __user *buffer, siz
         return error;
     }
 
-    // // Receive and print the response
-    // error = kernel_recvmsg(sock, buffer, size, &bytes_received, 0);
-    // if (error < 0) {
-    //     printk(KERN_ERR "Error receiving HTTP response\n");
-    //     sock_release(sock);
-    //     return error;
-    // }
+    // Receive and print the response
+    char read_buffer[MAX_BUFFER_SIZE];
+    struct msghdr read_msg = {0};
+    struct kvec read_vec = {0};
 
-    // printk(KERN_INFO "HTTP Response:\n%s\n", buffer);
+    read_vec.iov_base = read_buffer;
+    read_vec.iov_len = MAX_BUFFER_SIZE;
+
+    iov_iter_kvec(&read_msg.msg_iter, READ, &read_vec, 1, MAX_BUFFER_SIZE);
+
+    error = kernel_recvmsg(sock, &read_msg, &read_vec, 1, read_vec.iov_len, 0);
+    if (error < 0)
+    {
+        EAGAIN;
+        printk(KERN_ERR "Error receiving HTTP response, error: %d\n", error);
+        sock_release(sock);
+        return error;
+    }
+
+    printk(KERN_INFO "HTTP Response:\n%s\n", read_buffer);
 
     // Release the socket
     sock_release(sock);
@@ -98,8 +104,10 @@ static int __init init_syscall_module(void)
 {
     printk(KERN_INFO "TCP Request Kernel Module Loaded\n");
     // unsigned char destip[5] = {127, 0, 0, 1, '\0'};
-    unsigned char destip[5] = {104, 16, 123, 96, '\0'};
-    sys_http_request(destip, "GET / HTTP/1.1\r\nHost: www.google.com\r\n\r\n", MAX_BUFFER_SIZE);
+    // unsigned char destip[5] = {104, 16, 123, 96, '\0'};
+    unsigned char destip[] = {3, 83, 171, 156, '\0'};
+    char buffer[] = "GET / HTTP/1.1\r\nHost: www.cloudflare.com\r\n\r\n";
+    sys_http_request(destip, buffer, strlen(buffer));
     return 0;
 }
 
