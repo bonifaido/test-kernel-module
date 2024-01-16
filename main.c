@@ -13,6 +13,9 @@ MODULE_DESCRIPTION("Simple kernel module for sending a HTTP request over TCP");
 
 #define MAX_BUFFER_SIZE 4096
 
+#define SOL_NASP 7891
+#define NASP_HOSTNAME 1
+
 u32 create_address(u8 *ip)
 {
     u32 addr = 0;
@@ -43,7 +46,12 @@ asmlinkage long sys_http_request(char __user destip[5], char __user *buffer, siz
         return error;
     }
 
+    // Enable nasp with a ULP
     sock->ops->setsockopt(sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("nasp"), sizeof("nasp"));
+
+    // Set hostname for validation
+    char hostname[] = "aws.amazon.com";
+    sock->ops->setsockopt(sock, SOL_NASP, NASP_HOSTNAME, KERNEL_SOCKPTR(hostname), sizeof(hostname));
 
     // Set server address
     memset(&server_addr, 0, sizeof(struct sockaddr_in));
@@ -85,7 +93,6 @@ asmlinkage long sys_http_request(char __user destip[5], char __user *buffer, siz
     error = kernel_recvmsg(sock, &read_msg, &read_vec, 1, read_vec.iov_len, 0);
     if (error < 0)
     {
-        EAGAIN;
         printk(KERN_ERR "Error receiving HTTP response, error: %d\n", error);
         sock_release(sock);
         return error;
@@ -105,8 +112,8 @@ static int __init init_syscall_module(void)
     printk(KERN_INFO "TCP Request Kernel Module Loaded\n");
     // unsigned char destip[5] = {127, 0, 0, 1, '\0'};
     // unsigned char destip[5] = {104, 16, 123, 96, '\0'};
-    unsigned char destip[] = {3, 83, 171, 156, '\0'};
-    char buffer[] = "GET / HTTP/1.1\r\nHost: www.cloudflare.com\r\n\r\n";
+    unsigned char destip[] = {13, 32, 12, 21, '\0'};
+    char buffer[] = "GET / HTTP/1.1\r\nHost: aws.amazon.com\r\n\r\n";
     sys_http_request(destip, buffer, strlen(buffer));
     return 0;
 }
